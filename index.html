@@ -856,11 +856,13 @@ window.addEventListener('load', function() {
     }
   });
 
-  closeBtn.addEventListener('click', () => {
-    if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
-    game.classList.remove('active');
-    setGameState('idle');
-  });
+closeBtn.addEventListener('click', () => {
+  if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
+  const game = document.getElementById('reaction-game');
+  game.style.display = 'none';       
+  game.classList.remove('active');
+  setGameState('idle');
+});
 
   document.addEventListener('keydown', (e) => {
     if (e.code === 'Space' && game.classList.contains('active')) {
@@ -872,11 +874,12 @@ window.addEventListener('load', function() {
   setGameState('idle');
   updateBestDisplay();
 
-  window.openReactionGame = function() {
-    game.classList.add('active');
-    setGameState('idle');
-  };
-})();
+window.openReactionGame = function() {
+  const game = document.getElementById('reaction-game');
+  game.style.display = 'flex';         
+  game.classList.add('active');
+  setGameState('idle');                
+};
   
 </script>
 
