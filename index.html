@@ -859,7 +859,7 @@ window.addEventListener('load', function() {
 closeBtn.addEventListener('click', () => {
   if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
   const game = document.getElementById('reaction-game');
-  game.style.display = 'none';          
+  game.style.display = 'none';
   game.classList.remove('active');
   setGameState('idle');
   document.getElementById('projects').style.display = 'flex';
