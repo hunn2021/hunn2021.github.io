@@ -157,6 +157,14 @@ h1{
   color: var(--text);
   clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
   z-index: 9998;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+#projects.show {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 #projects::before {
@@ -356,13 +364,6 @@ h1{
 .section:first-of-type {
   position: relative;
 }
-
-#projects.fade-out {
-  opacity: 0;
-  transform: scale(0.96);
-  pointer-events: none; 
-  transition: opacity 0.3s ease, transform 0.3s ease;
-}
   
 </style>
 
@@ -471,24 +472,22 @@ const backBtn = document.getElementById("backBtn");
 
 openBtn.onclick = () => {
   projectPage.style.display = "flex";
+  requestAnimationFrame(() => {
+    projectPage.classList.add('show');
+  });
 };
 
 backBtn.onclick = () => {
-  projectPage.style.display = "none";
+  projectPage.classList.remove('show');
+  setTimeout(() => {
+    projectPage.style.display = "none";
+  }, 350); 
 };
 
 document.querySelectorAll('.project-item').forEach(item => {
   item.addEventListener('click', function() {
     const name = this.textContent.trim();
-    const projectPage = document.getElementById('projects');
-    
-    projectPage.classList.add('fade-out');
-    
-    setTimeout(() => {
-      alert(`文件制作中：${name}`);
-      
-      projectPage.classList.remove('fade-out');
-    }, 350); 
+    alert(`文件制作中：${name}`);
   });
 });
 
