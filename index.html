@@ -246,15 +246,21 @@ h1{
 }
 
 .hw-item{
-  width:220px;
-  height:100px;
-  padding:20px;
+  min-width: 140px;  
+  width: auto;      
+  padding: 18px 22px;
+  height: 100px;    
   border-radius:22px;
   background: rgba(255,255,255,0.35);
   backdrop-filter:blur(15px);
   border:1px solid rgba(255,255,255,0.25);
   box-shadow: 0 20px 40px rgba(0,0,0,0.08);
   transition: transform 0.15s ease, box-shadow 0.3s;
+  display: flex;         
+  flex-direction: column;
+  justify-content: center; 
+  align-items: flex-start;
+  flex-shrink: 0;         
 }
 
 .hw-item:hover{
@@ -301,6 +307,58 @@ h1{
   -ms-overflow-style: none;
 }
 
+.scroll-hint {
+  position: absolute;
+  bottom: 40px;              
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  opacity: 0;               
+  transition: opacity 1s ease;
+  color: var(--text);
+  font-size: 12px;
+  letter-spacing: 2px;
+}
+
+.scroll-hint.show {
+  opacity: 0.6;             
+}
+
+.scroll-arrow {
+  display: block;
+  width: 20px;
+  height: 20px;
+  border-right: 2px solid var(--text);
+  border-bottom: 2px solid var(--text);
+  transform: rotate(45deg);
+  animation: bounce-down 1.8s infinite ease-in-out;
+}
+
+@keyframes bounce-down {
+  0%, 100% {
+    transform: rotate(45deg) translate(0, 0);
+    opacity: 0.3;
+  }
+  50% {
+    transform: rotate(45deg) translate(6px, 6px);
+    opacity: 1;
+  }
+}
+
+.scroll-text {
+  font-size: 11px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  opacity: 0.5;
+  font-weight: 300;
+}
+
+.section:first-of-type {
+  position: relative;
+}
 </style>
 
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%230d0d0d' rx='24'/%3E%3Ctext x='50' y='72' font-family='Arial, sans-serif' font-size='64' font-weight='600' fill='%23ffffff' text-anchor='middle'%3EH%3C/text%3E%3C/svg%3E">
@@ -318,6 +376,10 @@ h1{
   <section class="section">
     <h1>HELLO</h1>
     <p>HUNN的个人空间</p>
+  <div class="scroll-hint" id="scrollHint">
+    <span class="scroll-arrow"></span>
+    <span class="scroll-text">向下滑动</span>
+  </div>
   </section>
 
   <section class="section">
@@ -536,10 +598,30 @@ function animateParticles() {
 }
 animateParticles();
 
-document.getElementById('aboutLink').addEventListener('click', function() {
-  alert('\n- 作者：hunn2021\n- 版本：1.0\n- 项目：仅仅是一个个人空间');
+document.getElementById('aboutLink').addEventListener('click', function(e) {
+  e.preventDefault();
+  alert(
+    '╭─────────────────╮\n' +
+    '│  $ whoami       │\n' +
+    '├─────────────────┤\n' +
+    '│  HUNN2021        │\n' +
+    '│  状态：在线     │\n' +
+    '│  版本：1.0      │\n' +
+    '│  项目：个人空间 │\n' +
+    '╰─────────────────╯\n' +
+    '\n“INTERNATIONALE”'
+  );
 });
 
+window.addEventListener('load', function() {
+  setTimeout(function() {
+    const hint = document.getElementById('scrollHint');
+    if (hint) {
+      hint.classList.add('show');
+    }
+  }, 3000); 
+});
+  
 </script>
 
 </body>
