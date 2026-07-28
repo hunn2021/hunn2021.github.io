@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Canvas 实验 · 体素世界</title>
+  <title>Canvas 实验 · 体素+晶格复合体</title>
   <style>
     body { margin: 0; overflow: hidden; background: #0d0d0d; }
     #info {
@@ -11,18 +11,19 @@
       bottom: 30px;
       left: 50%;
       transform: translateX(-50%);
-      color: rgba(255,255,255,0.25);
-      font-family: monospace;
+      color: rgba(255,255,255,0.3);
+      font-family: 'Courier New', monospace;
       font-size: 13px;
       letter-spacing: 2px;
       pointer-events: none;
       z-index: 10;
+      text-shadow: 0 0 10px rgba(0,0,0,0.8);
     }
     .back-link {
       position: fixed;
       top: 24px;
       left: 28px;
-      color: rgba(255,255,255,0.3);
+      color: rgba(255,255,255,0.4);
       text-decoration: none;
       font-family: -apple-system, sans-serif;
       font-size: 14px;
@@ -30,12 +31,61 @@
       transition: color 0.2s;
       letter-spacing: 1px;
     }
-    .back-link:hover { color: rgba(255,255,255,0.7); }
+    .back-link:hover { color: rgba(255,255,255,0.8); }
+    #fps-display {
+      position: fixed;
+      top: 24px;
+      right: 28px;
+      color: rgba(255,255,255,0.5);
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      z-index: 20;
+      background: rgba(0,0,0,0.4);
+      padding: 6px 12px;
+      border-radius: 4px;
+      backdrop-filter: blur(4px);
+      border: 1px solid rgba(255,255,255,0.08);
+      user-select: none;
+      pointer-events: none;
+    }
+    #fps-display span { color: #88ddff; font-weight: bold; }
+
+    #fp-toggle {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 30;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: rgba(255,255,255,0.5);
+      padding: 8px 20px;
+      border-radius: 30px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(8px);
+      user-select: none;
+    }
+    #fp-toggle:hover {
+      background: rgba(255,255,255,0.12);
+      color: rgba(255,255,255,0.8);
+      border-color: rgba(255,255,255,0.25);
+    }
+    #fp-toggle.active {
+      background: rgba(100, 180, 255, 0.15);
+      border-color: rgba(100, 180, 255, 0.3);
+      color: rgba(100, 180, 255, 0.8);
+    }
   </style>
 </head>
 <body>
-  <a href="../index.html" class="back-link">← 返回</a>
-  <div id="info">拖拽旋转 · 滚轮缩放 · R重置视角 · A切换自动旋转</div>
+  <a href="index.html" class="back-link">← 返回</a>
+  <div id="fps-display">FPS: <span id="fps-value">--</span></div>
+  <div id="info">拖拽旋转 · 滚轮缩放 · R重置 · A自转</div>
+  <button id="fp-toggle">◉ 第一人称</button>
 
   <script type="importmap">
     {
@@ -49,142 +99,352 @@
   <script type="module">
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-    import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0d0d0d);
+    scene.background = new THREE.Color(0x0a0a14);
+    scene.fog = new THREE.Fog(0x0a0a14, 25, 50);
 
-    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(18, 12, 18);
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(22, 16, 22);
     camera.lookAt(0, 0, 0);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.2;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     document.body.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     controls.autoRotate = true;
-    controls.autoRotateSpeed = 1.8;
-    controls.minDistance = 6;
-    controls.maxDistance = 40;
+    controls.autoRotateSpeed = 0.8;
+    controls.minDistance = 0.5;
+    controls.maxDistance = 45;
     controls.target.set(0, 0, 0);
     controls.update();
 
-    const ambientLight = new THREE.AmbientLight(0x404060);
-    scene.add(ambientLight);
+    const defaultCamPos = new THREE.Vector3(22, 16, 22);
+    const defaultTarget = new THREE.Vector3(0, 0, 0);
+    let isFirstPerson = false;
 
-    const dirLight = new THREE.DirectionalLight(0xffeedd, 2.5);
-    dirLight.position.set(10, 20, 10);
-    dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 1024;
-    dirLight.shadow.mapSize.height = 1024;
-    const d = 25;
-    dirLight.shadow.camera.left = -d;
-    dirLight.shadow.camera.right = d;
-    dirLight.shadow.camera.top = d;
-    dirLight.shadow.camera.bottom = -d;
-    dirLight.shadow.camera.near = 1;
-    dirLight.shadow.camera.far = 50;
-    scene.add(dirLight);
+    const fpCamPos = new THREE.Vector3(0, 3.5, 11);
+    const fpTarget = new THREE.Vector3(0, 2.5, 0);
 
-    const fillLight = new THREE.DirectionalLight(0x4488ff, 0.6);
-    fillLight.position.set(-10, 5, -10);
-    scene.add(fillLight);
+    const fpToggle = document.getElementById('fp-toggle');
+    fpToggle.addEventListener('click', () => {
+      isFirstPerson = !isFirstPerson;
+      
+      if (isFirstPerson) {
+        camera.position.copy(fpCamPos);
+        controls.target.copy(fpTarget);
+        controls.minDistance = 0.1;
+        controls.maxDistance = 3;
+        controls.enableZoom = false;
+        controls.enablePan = false;
+        controls.autoRotate = false;
+        fpToggle.textContent = '◉ 第三人称';
+        fpToggle.classList.add('active');
+        document.getElementById('info').textContent = '第一人称 · 拖拽环顾';
+      } else {
+        camera.position.copy(defaultCamPos);
+        controls.target.copy(defaultTarget);
+        controls.minDistance = 8;
+        controls.maxDistance = 45;
+        controls.enableZoom = true;
+        controls.enablePan = true;
+        controls.autoRotate = true;
+        fpToggle.textContent = '◉ 第一人称';
+        fpToggle.classList.remove('active');
+        document.getElementById('info').textContent = '拖拽旋转 · 滚轮缩放 · R重置 · A自转';
+      }
+      controls.update();
+    });
 
-    const rimLight = new THREE.DirectionalLight(0xffaa66, 0.4);
-    rimLight.position.set(-5, 0, 15);
-    scene.add(rimLight);
+    scene.add(new THREE.AmbientLight(0x303060, 0.5));
+    scene.add(new THREE.HemisphereLight(0x88aaff, 0x443366, 0.6));
 
-    const gridHelper = new THREE.GridHelper(30, 20, 0x444466, 0x333355);
-    gridHelper.position.y = -3.5;
-    scene.add(gridHelper);
+    const mainLight = new THREE.DirectionalLight(0xffeedd, 2.8);
+    mainLight.castShadow = true;
+    mainLight.shadow.mapSize.width = 2048;
+    mainLight.shadow.mapSize.height = 2048;
+    const d = 30;
+    mainLight.shadow.camera.left = -d;
+    mainLight.shadow.camera.right = d;
+    mainLight.shadow.camera.top = d;
+    mainLight.shadow.camera.bottom = -d;
+    mainLight.shadow.camera.near = 1;
+    mainLight.shadow.camera.far = 60;
+    mainLight.shadow.bias = -0.001;
+    scene.add(mainLight);
+
+    scene.add(new THREE.DirectionalLight(0x4488ff, 0.5).position.set(-15, 5, -15));
+    scene.add(new THREE.DirectionalLight(0xffaa66, 0.3).position.set(-10, 15, 10));
+
+    const grid = new THREE.GridHelper(40, 24, 0x6666aa, 0x444477);
+    grid.position.y = -4;
+    scene.add(grid);
 
     const voxelGroup = new THREE.Group();
-    const size = 7;     
-    const spacing = 1.2;
+    const size = 9;
+    const spacing = 0.9;
     const colors = [
-      0x4a90d9, 0x50c8a0, 0xe67e22, 0xe74c3c, 
-      0x9b59b6, 0xf1c40f, 0x1abc9c, 0xe67e22
+      0x4a90d9, 0x50c8a0, 0xe67e22, 0xe74c3c,
+      0x9b59b6, 0xf1c40f, 0x1abc9c, 0x3498db,
+      0x2ecc71, 0xe67e22, 0x4a90d9, 0xe74c3c
     ];
 
     function getHeight(x, z) {
-      return Math.sin(x * 0.5) * Math.cos(z * 0.5) * 1.2 + 
-             Math.sin(x * 1.2 + z * 0.8) * 0.6;
+      return Math.sin(x * 0.4) * Math.cos(z * 0.35) * 1.5 +
+             Math.sin(x * 1.1 + z * 0.9) * 0.8 +
+             Math.cos(x * 0.7 - z * 0.5) * 0.6;
     }
 
+    const matCache = new Map();
+    function getVoxelMat(color, roughness, metalness, emissiveColor) {
+      const key = `${color}_${roughness}_${metalness}`;
+      if (matCache.has(key)) return matCache.get(key);
+      const mat = new THREE.MeshStandardMaterial({
+        color,
+        roughness,
+        metalness,
+        emissive: emissiveColor || new THREE.Color(0x000000),
+        emissiveIntensity: 0.1,
+      });
+      matCache.set(key, mat);
+      return mat;
+    }
+
+    let totalBoxes = 0;
     for (let x = -size; x <= size; x++) {
       for (let z = -size; z <= size; z++) {
         const dist = Math.sqrt(x*x + z*z);
-        if (dist > size + 1) continue;
-        
+        if (dist > size + 1.5) continue;
         const heightOffset = getHeight(x, z);
-        const baseY = Math.floor(heightOffset * 1.5);
-        const maxY = Math.max(1, Math.floor(3 + heightOffset * 0.8));
-        
+        const maxY = Math.max(1, Math.floor(4 + heightOffset * 1.2 + Math.sin(x*0.3+z*0.2)*0.5));
         for (let y = 0; y < maxY; y++) {
-          const colorIdx = Math.floor((x + z + y * 0.5) % colors.length);
           const isSurface = (y === maxY - 1);
-          const isDeep = (y < maxY * 0.3);
-          
-          let color;
+          const isDeep = (y < maxY * 0.25);
+          let color, roughness = 0.5, metalness = 0.1, emissive = null;
           if (isSurface) {
-            color = colors[Math.floor((x + z) % colors.length)];
+            color = colors[Math.floor((x * 1.2 + z * 0.8) % colors.length)];
+            roughness = 0.3;
+            metalness = 0.4;
+            emissive = new THREE.Color(color).multiplyScalar(0.15);
           } else if (isDeep) {
-            color = 0x2c3e50;
+            color = 0x1a2a3a;
+            roughness = 0.8;
+            metalness = 0.0;
           } else {
-            color = 0x34495e;
+            color = 0x2c3e50;
+            roughness = 0.6;
+            metalness = 0.1;
           }
-          
-          const material = new THREE.MeshStandardMaterial({
-            color: color,
-            roughness: isSurface ? 0.4 : 0.7,
-            metalness: isSurface ? 0.3 : 0.1,
-            emissive: isSurface ? new THREE.Color(color).multiplyScalar(0.08) : new THREE.Color(0x000000),
-            emissiveIntensity: 0.1,
-          });
-          
-          const box = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.85, 0.85), material);
-          box.position.set(x * spacing, y * spacing - 2, z * spacing);
+          const mat = getVoxelMat(color, roughness, metalness, emissive);
+          const box = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), mat);
+          box.position.set(x * spacing, y * spacing - 2.5, z * spacing);
           box.castShadow = true;
           box.receiveShadow = true;
           voxelGroup.add(box);
+          totalBoxes++;
         }
       }
     }
     scene.add(voxelGroup);
+    console.log(`体素方块总数: ${totalBoxes}`);
 
-    const starGeometry = new THREE.BufferGeometry();
-    const starCount = 800;
-    const starPositions = new Float32Array(starCount * 3);
-    for (let i = 0; i < starCount * 3; i++) {
-      starPositions[i] = (Math.random() - 0.5) * 60;
+    const latticeGroup = new THREE.Group();
+    const sphereRadius = 0.12;
+    const tubeRadius = 0.035;
+
+    const clusterNodes = [];
+    const clusterCenters = [];
+
+    for (let i = 0; i < 24; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos((Math.random() * 2) - 1);
+      const radius = 10 + Math.random() * 6;
+      const x = radius * Math.sin(phi) * Math.cos(theta);
+      const y = (Math.random() - 0.5) * 7;
+      const z = radius * Math.sin(phi) * Math.sin(theta);
+      clusterCenters.push(new THREE.Vector3(x, y, z));
     }
-    starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
-    const starMaterial = new THREE.PointsMaterial({
-      color: 0x88aaff,
-      size: 0.08,
+
+    clusterCenters.forEach(center => {
+      const count = 8 + Math.floor(Math.random() * 8);
+      for (let i = 0; i < count; i++) {
+        const spread = 0.8 + Math.random() * 1.5;
+        const x = center.x + (Math.random() - 0.5) * spread * 2;
+        const y = center.y + (Math.random() - 0.5) * spread * 1.5;
+        const z = center.z + (Math.random() - 0.5) * spread * 2;
+        const distFromCenter = Math.sqrt(x*x + y*y + z*z);
+        if (distFromCenter > 7.5) {
+          clusterNodes.push(new THREE.Vector3(x, y, z));
+        }
+      }
+    });
+
+    for (let i = 0; i < 80; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos((Math.random() * 2) - 1);
+      const radius = 9 + Math.random() * 8;
+      const x = radius * Math.sin(phi) * Math.cos(theta);
+      const y = (Math.random() - 0.5) * 8;
+      const z = radius * Math.sin(phi) * Math.sin(theta);
+      if (Math.sqrt(x*x + y*y + z*z) > 7.5) {
+        clusterNodes.push(new THREE.Vector3(x, y, z));
+      }
+    }
+
+    const sphereGeo = new THREE.SphereGeometry(sphereRadius, 7, 7);
+    const colorVariations = [0x6688cc, 0x7799dd, 0x5577bb, 0x88aadd, 0x6699cc];
+    clusterNodes.forEach((pos, idx) => {
+      const colorIdx = idx % colorVariations.length;
+      const mat = new THREE.MeshStandardMaterial({
+        color: colorVariations[colorIdx],
+        roughness: 0.3 + Math.random() * 0.3,
+        metalness: 0.4 + Math.random() * 0.4,
+        emissive: new THREE.Color(colorVariations[colorIdx]).multiplyScalar(0.06),
+      });
+      const mesh = new THREE.Mesh(sphereGeo, mat);
+      mesh.position.copy(pos);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      latticeGroup.add(mesh);
+    });
+
+    const tubeMat = new THREE.MeshStandardMaterial({
+      color: 0x6688cc,
+      roughness: 0.4,
+      metalness: 0.3,
+      transparent: true,
+      opacity: 0.2,
+    });
+
+    function addTube(a, b) {
+      const mid = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
+      const dir = new THREE.Vector3().subVectors(b, a);
+      const len = dir.length();
+      if (len < 0.1 || len > 2.5) return;
+      dir.normalize();
+      const tube = new THREE.Mesh(
+        new THREE.CylinderGeometry(tubeRadius, tubeRadius, len, 3, 1),
+        tubeMat
+      );
+      tube.position.copy(mid);
+      tube.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+      tube.castShadow = true;
+      tube.receiveShadow = true;
+      latticeGroup.add(tube);
+    }
+
+    for (let i = 0; i < clusterNodes.length; i++) {
+      for (let j = i + 1; j < clusterNodes.length; j++) {
+        const a = clusterNodes[i];
+        const b = clusterNodes[j];
+        const dist = a.distanceTo(b);
+        if (dist > 0.8 && dist < 2.2) {
+          addTube(a, b);
+        }
+      }
+    }
+
+    scene.add(latticeGroup);
+    console.log(`外围散落节点: ${clusterNodes.length}`);
+
+    const starGeo = new THREE.BufferGeometry();
+    const starCount = 1800;
+    const starPos = new Float32Array(starCount * 3);
+    const starCol = new Float32Array(starCount * 3);
+    for (let i = 0; i < starCount; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos((Math.random() * 2) - 1);
+      const r = 20 + Math.random() * 30;
+      starPos[i*3] = r * Math.sin(phi) * Math.cos(theta);
+      starPos[i*3+1] = r * Math.cos(phi) * 0.6 + 3;
+      starPos[i*3+2] = r * Math.sin(phi) * Math.sin(theta);
+      const c = new THREE.Color().setHSL(0.6 + Math.random()*0.3, 0.5, 0.4 + Math.random()*0.4);
+      starCol[i*3] = c.r;
+      starCol[i*3+1] = c.g;
+      starCol[i*3+2] = c.b;
+    }
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+    starGeo.setAttribute('color', new THREE.BufferAttribute(starCol, 3));
+    const starMat = new THREE.PointsMaterial({
+      size: 0.15,
       transparent: true,
       opacity: 0.6,
       blending: THREE.AdditiveBlending,
+      vertexColors: true,
+      sizeAttenuation: true,
     });
-    const stars = new THREE.Points(starGeometry, starMaterial);
-    stars.position.y = 5;
+    const stars = new THREE.Points(starGeo, starMat);
     scene.add(stars);
+
+    const dustGeo = new THREE.BufferGeometry();
+    const dustCount = 500;
+    const dustPos = new Float32Array(dustCount * 3);
+    for (let i = 0; i < dustCount; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const rad = 5 + Math.random() * 12;
+      dustPos[i*3] = Math.cos(angle) * rad;
+      dustPos[i*3+1] = (Math.random() - 0.5) * 8;
+      dustPos[i*3+2] = Math.sin(angle) * rad;
+    }
+    dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+    const dustMat = new THREE.PointsMaterial({
+      color: 0x88aaff,
+      size: 0.04,
+      transparent: true,
+      opacity: 0.3,
+      blending: THREE.AdditiveBlending,
+    });
+    const dust = new THREE.Points(dustGeo, dustMat);
+    dust.position.y = 1;
+    scene.add(dust);
+
+    let frameCount = 0;
+    let lastTime = performance.now();
+    const fpsSpan = document.getElementById('fps-value');
+
+    function updateFPS() {
+      const now = performance.now();
+      const delta = now - lastTime;
+      if (delta >= 1000) {
+        fpsSpan.textContent = Math.round((frameCount * 1000) / delta);
+        frameCount = 0;
+        lastTime = now;
+      }
+      frameCount++;
+      requestAnimationFrame(updateFPS);
+    }
+    updateFPS();
+
+    let time = 0;
 
     function animate() {
       requestAnimationFrame(animate);
-      
+      time += 0.002;
+
+      const radiusX = 18;
+      const radiusZ = 14;
+      const height = 20;
+      const angle = time * 0.6;
+      mainLight.position.set(
+        Math.cos(angle) * radiusX,
+        height + Math.sin(angle * 1.3) * 3,
+        Math.sin(angle) * radiusZ
+      );
+      mainLight.target.position.set(0, 0, 0);
+      scene.add(mainLight.target);
+
       controls.update();
-      
-      stars.rotation.y += 0.0003;
-      
+      stars.rotation.y += 0.0002;
+      dust.rotation.y += 0.0005;
       renderer.render(scene, camera);
     }
     animate();
@@ -199,16 +459,20 @@
 
     window.addEventListener('keydown', (e) => {
       if (e.key === 'r' || e.key === 'R') {
-        camera.position.set(18, 12, 18);
-        controls.target.set(0, 0, 0);
-        controls.update();
+        if (!isFirstPerson) {
+          camera.position.copy(defaultCamPos);
+          controls.target.copy(defaultTarget);
+          controls.update();
+        }
       }
       if (e.key === 'a' || e.key === 'A') {
-        controls.autoRotate = !controls.autoRotate;
+        if (!isFirstPerson) {
+          controls.autoRotate = !controls.autoRotate;
+        }
       }
     });
 
-    console.log('体素世界已加载！拖拽旋转 · 滚轮缩放 · R重置视角 · A切换自动旋转');
+    console.log('体素+晶格复合体');
   </script>
 </body>
 </html>
