@@ -356,6 +356,14 @@ h1{
 .section:first-of-type {
   position: relative;
 }
+
+#projects.fade-out {
+  opacity: 0;
+  transform: scale(0.96);
+  pointer-events: none; 
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+  
 </style>
 
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%230d0d0d' rx='24'/%3E%3Ctext x='50' y='72' font-family='Arial, sans-serif' font-size='64' font-weight='600' fill='%23ffffff' text-anchor='middle'%3EH%3C/text%3E%3C/svg%3E">
@@ -472,7 +480,15 @@ backBtn.onclick = () => {
 document.querySelectorAll('.project-item').forEach(item => {
   item.addEventListener('click', function() {
     const name = this.textContent.trim();
-    alert(`文件制作ing：${name}`);
+    const projectPage = document.getElementById('projects');
+    
+    projectPage.classList.add('fade-out');
+    
+    setTimeout(() => {
+      alert(`文件制作中：${name}`);
+      
+      projectPage.classList.remove('fade-out');
+    }, 350); 
   });
 });
 
