@@ -364,6 +364,108 @@ h1{
 .section:first-of-type {
   position: relative;
 }
+
+#reaction-game {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: var(--bg);
+  color: var(--text);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+  padding: 20px;
+}
+#reaction-game.active {
+  display: flex;
+}
+
+#reaction-game.waiting {
+  background: var(--bg);
+}
+#reaction-game.ready {
+  background: #1a4a1a;
+}
+#reaction-game.ready .timer {
+  color: #8f8;
+}
+#reaction-game.result {
+  background: var(--bg);
+}
+
+#reaction-game .status {
+  font-size: 1.2rem;
+  letter-spacing: 2px;
+  opacity: 0.6;
+  margin-bottom: 20px;
+}
+#reaction-game .timer {
+  font-size: 6rem;
+  font-weight: 300;
+  letter-spacing: 4px;
+  margin-bottom: 30px;
+  font-variant-numeric: tabular-nums;
+}
+#reaction-game .sub {
+  font-size: 0.9rem;
+  opacity: 0.4;
+  letter-spacing: 1px;
+  margin-top: 10px;
+}
+#reaction-game .result-text {
+  margin-top: 16px;
+  font-size: 0.9rem;
+  opacity: 0.5;
+  letter-spacing: 1px;
+  min-height: 2em;
+}
+#reaction-game .best {
+  font-size: 0.8rem;
+  opacity: 0.3;
+  margin-top: 6px;
+  letter-spacing: 1px;
+}
+
+#reaction-game .close-game {
+  position: fixed;
+  top: 24px;
+  right: 30px;
+  font-size: 0.9rem;
+  letter-spacing: 2px;
+  cursor: pointer;
+  opacity: 0.3;
+  transition: opacity 0.2s;
+  z-index: 10;
+}
+#reaction-game .close-game:hover {
+  opacity: 0.8;
+}
+
+#reaction-game .restart-btn {
+  margin-top: 30px;
+  padding: 10px 28px;
+  border: 1px solid var(--text);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: 0.25s;
+  border-radius: 30px;
+  font-size: 0.9rem;
+  letter-spacing: 2px;
+}
+#reaction-game .restart-btn:hover {
+  background: var(--text);
+  color: var(--bg);
+}
+
+#reaction-game .click-area {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  cursor: pointer;
+}
   
 </style>
 
@@ -487,7 +589,12 @@ backBtn.onclick = () => {
 document.querySelectorAll('.project-item').forEach(item => {
   item.addEventListener('click', function() {
     const name = this.textContent.trim();
-    alert(`文件制作中：${name}`);
+    if (name === 'Canvas 实验') {
+      document.getElementById('projects').style.display = 'none';
+      if (window.openReactionGame) window.openReactionGame();
+    } else {
+      alert(`文件制作中：${name}`);
+    }
   });
 });
 
@@ -631,8 +738,158 @@ window.addEventListener('load', function() {
     }
   }, 3000); 
 });
+
+(function() {
+  const game = document.getElementById('reaction-game');
+  const statusEl = document.getElementById('gameStatus');
+  const timerEl = document.getElementById('gameTimer');
+  const resultEl = document.getElementById('gameResult');
+  const bestEl = document.getElementById('gameBest');
+  const restartBtn = document.getElementById('gameRestartBtn');
+  const closeBtn = document.getElementById('closeGame');
+  const clickArea = document.getElementById('gameClickArea');
+
+  let state = 'idle'; // idle | waiting | ready | result
+  let timeoutId = null;
+  let readyTime = 0;
+  let bestScore = Infinity;
+
+  try {
+    const saved = localStorage.getItem('reactionBest');
+    if (saved) bestScore = parseFloat(saved);
+  } catch (_) {}
+
+  function updateBestDisplay() {
+    bestEl.textContent = bestScore !== Infinity ? ` 最佳 ${bestScore.toFixed(0)}ms` : '';
+  }
+
+  function setGameState(newState) {
+    state = newState;
+    game.className = '';
+    switch (state) {
+      case 'idle':
+        game.classList.add('active');
+        statusEl.textContent = '点击下方按钮开始';
+        timerEl.textContent = '—';
+        restartBtn.textContent = '开始挑战';
+        resultEl.textContent = '反应速度将显示在这里';
+        break;
+      case 'waiting':
+        game.classList.add('active', 'waiting');
+        statusEl.textContent = '等待随机时机……';
+        timerEl.textContent = '···';
+        restartBtn.textContent = '等待中';
+        resultEl.textContent = '变绿后点击任意位置！';
+        break;
+      case 'ready':
+        game.classList.add('active', 'ready');
+        statusEl.textContent = '时机以至！';
+        timerEl.textContent = '点击！';
+        restartBtn.textContent = '点击！';
+        resultEl.textContent = '就是现在！';
+        break;
+      case 'result':
+        game.classList.add('active', 'result');
+        statusEl.textContent = '完成！';
+        restartBtn.textContent = '再来一次';
+        break;
+    }
+    updateBestDisplay();
+  }
+
+  function startRound() {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+    const waitTime = Math.floor(Math.random() * 4000) + 1000;
+    setGameState('waiting');
+    readyTime = 0;
+    timeoutId = setTimeout(() => {
+      readyTime = performance.now();
+      setGameState('ready');
+      timeoutId = null;
+    }, waitTime);
+  }
+
+  function handleGameClick(e) {
+    if (e.target.closest('.close-game') || e.target.closest('.restart-btn')) return;
+
+    if (state === 'idle' || state === 'result') {
+      startRound();
+      return;
+    }
+
+    if (state === 'ready') {
+      const clickTime = performance.now();
+      const reactionMs = clickTime - readyTime;
+      if (reactionMs < 50) {
+        setGameState('idle');
+        resultEl.textContent = '太早了！重新开始';
+        if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
+        return;
+      }
+      setGameState('result');
+      timerEl.textContent = reactionMs.toFixed(0) + 'ms';
+      resultEl.textContent = `反应速度 ${reactionMs.toFixed(0)}ms`;
+      if (reactionMs < bestScore) {
+        bestScore = reactionMs;
+        localStorage.setItem('reactionBest', String(bestScore));
+      }
+      updateBestDisplay();
+      return;
+    }
+
+    if (state === 'waiting') {
+      setGameState('idle');
+      if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
+      resultEl.textContent = ' 请等待变绿！';
+    }
+  }
+
+  clickArea.addEventListener('click', handleGameClick);
+
+  restartBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (state === 'idle' || state === 'result') {
+      startRound();
+    }
+  });
+
+  closeBtn.addEventListener('click', () => {
+    if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
+    game.classList.remove('active');
+    setGameState('idle');
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && game.classList.contains('active')) {
+      e.preventDefault();
+      handleGameClick(e);
+    }
+  });
+
+  setGameState('idle');
+  updateBestDisplay();
+
+  window.openReactionGame = function() {
+    game.classList.add('active');
+    setGameState('idle');
+  };
+})();
   
 </script>
 
+<div id="reaction-game">
+  <span class="close-game" id="closeGame">✕ 关闭</span>
+  <div class="click-area" id="gameClickArea"></div>
+  
+  <div class="status" id="gameStatus">点击下方按钮开始</div>
+  <div class="timer" id="gameTimer">—</div>
+  <div class="result-text" id="gameResult">反应速度将显示在这里</div>
+  <div class="best" id="gameBest"></div>
+  <button class="restart-btn" id="gameRestartBtn">开始挑战</button>
+</div>
+  
 </body>
 </html>
